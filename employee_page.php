@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO notifications (title, user_id, vacation_request_id, created_at)
                     VALUES (:title, :user_id, :vacation_request_id, NOW())
                 ");
-                $notification_title = "New vacation request from " . $_SESSION['user_id'];
+                $notification_title = "New vacation request from ";
                 $insert_notification_query->bindParam(":title", $notification_title);
                 $insert_notification_query->bindParam(":user_id", $_SESSION['user_id']);
                 $insert_notification_query->bindParam(":vacation_request_id", $vacation_request_id);
