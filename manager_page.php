@@ -18,80 +18,124 @@ $db = $database->connect();
 $userModel = new User($db);
 
 // Fetch users for the table
-$users = $db->query("SELECT id, name, email FROM users WHERE usertype_id = 2" )->fetchAll(PDO::FETCH_ASSOC);
+$users = $db->query("SELECT id, name, email, employee_code FROM users WHERE usertype_id = 2" )->fetchAll(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         if ($_POST['action'] === 'create_user') {
             $name = trim($_POST['name']);
             $email = trim($_POST['email']);
+            $employee_code = trim($_POST['employee_code']);
             $password = trim($_POST['password']);
             $confirm_password = trim($_POST['confirm_password']);
         
-            // Check for empty fields, password match, and exact length of 7
-            if (!empty($name) && !empty($email) && !empty($password) && $password === $confirm_password && strlen($password) === 7) {
+            // Validation flags and error messages
+            if (empty($name) || empty($email) || empty($employee_code) || empty($password) || empty($confirm_password)) {
+                $_SESSION['error_message'] = "All fields are required.";
+            } elseif (strlen($employee_code) !== 7) {
+                $_SESSION['error_message'] = "Employee code must be exactly 7 characters.";
+            } elseif (strlen($password) < 6) {
+                $_SESSION['error_message'] = "Password must be at least 6 characters.";
+            } elseif (!preg_match('/[A-Za-z]/', $password) || !preg_match('/[0-9]/', $password) || !preg_match('/[!@#$%^&*(),.?":{}|<>]/', $password)) {
+                $_SESSION['error_message'] = "Password must include at least one letter, one number, and one special character.";
+            } elseif ($password !== $confirm_password) {
+                $_SESSION['error_message'] = "Passwords do not match.";
+            } else {
+                // Check if email already exists
                 $query = $db->prepare("SELECT id FROM users WHERE email = :email");
                 $query->bindParam(":email", $email);
                 $query->execute();
         
+                // Check if employee_code already exists
+                $code_query = $db->prepare("SELECT id FROM users WHERE employee_code = :employee_code");
+                $code_query->bindParam(":employee_code", $employee_code);
+                $code_query->execute();
+        
                 if ($query->rowCount() > 0) {
-                    $_SESSION['error_message'] = "User already exists!";
+                    $_SESSION['error_message'] = "User with this email already exists!";
+                } elseif ($code_query->rowCount() > 0) {
+                    $_SESSION['error_message'] = "Employee code must be unique!";
                 } else {
                     $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-                    $insert_query = $db->prepare("INSERT INTO users (name, email, password, usertype_id) VALUES (:name, :email, :password, 2)");
+                    $insert_query = $db->prepare("INSERT INTO users (name, email, password, usertype_id, employee_code) VALUES (:name, :email, :password, 2, :employee_code)");
                     $insert_query->bindParam(":name", $name);
                     $insert_query->bindParam(":email", $email);
                     $insert_query->bindParam(":password", $hashed_password);
+                    $insert_query->bindParam(":employee_code", $employee_code);
                     $insert_query->execute();
                     $_SESSION['success_message'] = "User created successfully!";
                 }
-            } else {
-                $_SESSION['error_message'] = "Password must be exactly 7 characters and match the confirmation!";
             }
             header("Location: manager_page.php");
             exit();
-        }
-         elseif ($_POST['action'] === 'edit_user') {
+        } elseif ($_POST['action'] === 'edit_user') {
             $id = $_POST['id'];
             $name = trim($_POST['name']);
             $email = trim($_POST['email']);
+            $employee_code = trim($_POST['employee_code']);
             $old_password = trim($_POST['old_password']);
             $new_password = trim($_POST['new_password']);
             $confirm_new_password = trim($_POST['confirm_new_password']);
         
+            // Check if employee_code is unique (excluding current user)
+            $code_query = $db->prepare("SELECT id FROM users WHERE employee_code = :employee_code AND id != :id");
+            $code_query->bindParam(":employee_code", $employee_code);
+            $code_query->bindParam(":id", $id);
+            $code_query->execute();
+        
+            if ($code_query->rowCount() > 0) {
+                $_SESSION['error_message'] = "Employee code must be unique!";
+                header("Location: manager_page.php");
+                exit();
+            }
+        
+            // Validate employee code length
+            if (strlen($employee_code) !== 7) {
+                $_SESSION['error_message'] = "Employee code must be exactly 7 characters.";
+                header("Location: manager_page.php");
+                exit();
+            }
+        
             // Update basic user info
-            $update_query = $db->prepare("UPDATE users SET name = :name, email = :email WHERE id = :id");
+            $update_query = $db->prepare("UPDATE users SET name = :name, email = :email, employee_code = :employee_code WHERE id = :id");
             $update_query->bindParam(":name", $name);
             $update_query->bindParam(":email", $email);
+            $update_query->bindParam(":employee_code", $employee_code);
             $update_query->bindParam(":id", $id);
             $update_query->execute();
         
-            // Handle password update with exact length validation
-            if (!empty($old_password) && !empty($new_password) && $new_password === $confirm_new_password && strlen($new_password) === 7) {
-                $query = $db->prepare("SELECT password FROM users WHERE id = :id");
-                $query->bindParam(":id", $id);
-                $query->execute();
-                $user = $query->fetch(PDO::FETCH_ASSOC);
-        
-                if ($user && password_verify($old_password, $user['password'])) {
-                    $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
-                    $password_query = $db->prepare("UPDATE users SET password = :password WHERE id = :id");
-                    $password_query->bindParam(":password", $hashed_password);
-                    $password_query->bindParam(":id", $id);
-                    $password_query->execute();
-                    $_SESSION['success_message'] = "User updated successfully!";
+            // Handle password update
+            if (!empty($old_password) && !empty($new_password) && $new_password === $confirm_new_password) {
+                if (strlen($new_password) < 6) {
+                    $_SESSION['error_message'] = "Password must be at least 6 characters.";
+                } elseif (!preg_match('/[A-Za-z]/', $new_password) || !preg_match('/[0-9]/', $new_password) || !preg_match('/[!@#$%^&*(),.?":{}|<>]/', $new_password)) {
+                    $_SESSION['error_message'] = "Password must include at least one letter, one number, and one special character.";
                 } else {
-                    $_SESSION['error_message'] = "Old password is incorrect!";
+                    $query = $db->prepare("SELECT password FROM users WHERE id = :id");
+                    $query->bindParam(":id", $id);
+                    $query->execute();
+                    $user = $query->fetch(PDO::FETCH_ASSOC);
+        
+                    if ($user && password_verify($old_password, $user['password'])) {
+                        $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
+                        $password_query = $db->prepare("UPDATE users SET password = :password WHERE id = :id");
+                        $password_query->bindParam(":password", $hashed_password);
+                        $password_query->bindParam(":id", $id);
+                        $password_query->execute();
+                        $_SESSION['success_message'] = "User updated successfully!";
+                    } else {
+                        $_SESSION['error_message'] = "Old password is incorrect!";
+                    }
                 }
             } elseif (!empty($new_password) || !empty($confirm_new_password)) {
-                $_SESSION['error_message'] = "Password must be exactly 7 characters and match the confirmation!";
+                $_SESSION['error_message'] = "Passwords must match and follow the password rules.";
             } else {
                 $_SESSION['success_message'] = "User updated successfully!";
             }
             header("Location: manager_page.php");
             exit();
         }
-         elseif ($_POST['action'] === 'delete_user') {
+        elseif ($_POST['action'] === 'delete_user') {
             // Handle user deletion
             $id = $_POST['id'];
             $delete_query = $db->prepare("DELETE FROM users WHERE id = :id");
@@ -112,6 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manager Page</title>
+    <link rel="icon" type="image/jpeg" href="images/icon.jpg">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css"> 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
@@ -160,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Employee Code</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -168,8 +215,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <tr>
                     <td><?= htmlspecialchars($user['name']) ?></td>
                     <td><?= htmlspecialchars($user['email']) ?></td>
+                    <td><?= htmlspecialchars($user['employee_code']) ?></td>
                     <td>
-                        <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editUserModal" data-id="<?= $user['id'] ?>" data-name="<?= $user['name'] ?>" data-email="<?= $user['email'] ?>">Edit</button>
+                        <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editUserModal" data-id="<?= $user['id'] ?>" data-name="<?= $user['name'] ?>" data-email="<?= $user['email'] ?>" data-employee_code="<?= $user['employee_code'] ?>">Edit</button>
                         <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal" data-id="<?= $user['id'] ?>">Delete</button>
                     </td>
                 </tr>
@@ -196,6 +244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="employee_code" class="form-label">Employee Code</label>
+                            <input type="text" class="form-control" id="employee_code" name="employee_code" required>
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
@@ -233,6 +285,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="mb-3">
                         <label for="edit_email" class="form-label">Email</label>
                         <input type="email" class="form-control" id="edit_email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="employee_code" class="form-label">Employee Code</label>
+                        <input type="text" class="form-control" id="edit_employee_code" name="employee_code" required>
                     </div>
                     <div class="mb-3">
                         <label for="old_password" class="form-label">Old Password</label>
@@ -287,11 +343,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const id = button.getAttribute('data-id');
         const name = button.getAttribute('data-name');
         const email = button.getAttribute('data-email');
+        const employee_code = button.getAttribute('data-employee_code');
 
         editUserModal.querySelector('#edit_user_id').value = id;
         editUserModal.querySelector('#edit_name').value = name;
         editUserModal.querySelector('#edit_email').value = email;
-
+        editUserModal.querySelector('#edit_employee_code').value = employee_code;
         editUserModal.querySelector('#old_password').value = '';
         editUserModal.querySelector('#new_password').value = '';
         editUserModal.querySelector('#confirm_new_password').value = '';
