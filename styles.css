@@ -1,0 +1,152 @@
+/* General Styles */
+body {
+    background-color: #f8f9fa; /* Light background for better contrast */
+    font-family: 'Arial', sans-serif;
+    color: #212529;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 1200px;
+    margin: auto;
+    padding: 20px;
+}
+
+/* Navbar Styles */
+.navbar {
+    background-color: #007bff;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: bold;
+    color: white !important;
+}
+
+.navbar-nav .nav-link {
+    color: #ffffff !important;
+}
+
+.navbar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+}
+
+/* Heading and Button Styles */
+.d-flex h3 {
+    color: #343a40;
+    font-size: 1.75rem;
+    margin: 0;
+}
+
+.d-flex .btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    border-radius: 5px;
+    font-size: 1rem;
+    padding: 8px 16px;
+}
+
+.d-flex .btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+/* Table Styles */
+.table {
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.table th {
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    padding: 12px;
+    font-weight: bold;
+}
+
+.table td {
+    text-align: center;
+    padding: 10px;
+    vertical-align: middle;
+}
+
+.table .btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #343a40;
+    border-radius: 5px;
+}
+
+.table .btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #e0a800;
+}
+
+.table .btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    border-radius: 5px;
+}
+
+.table .btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+/* Modal Styles */
+.modal-content {
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    background-color: #007bff;
+    color: white;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+}
+
+.modal-title {
+    font-weight: bold;
+}
+
+.modal-footer .btn {
+    border-radius: 5px;
+}
+
+/* Toast Styles */
+.toast {
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+    font-size: 0.9rem;
+}
+
+.toast-body {
+    font-weight: bold;
+}
+
+/* Buttons in Toasts */
+.toast .btn-close {
+    color: white;
+    opacity: 0.9;
+}
+
+.toast .btn-close:hover {
+    opacity: 1;
+}
+
+/* Footer Styles */
+footer {
+    margin-top: 20px;
+    background-color: #343a40;
+    color: white;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 0.9rem;
+}
