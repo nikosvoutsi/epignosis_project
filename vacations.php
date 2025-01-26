@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once "Database.php";
+require_once "vacation.php";
+require_once "notification.php";
 
 // Redirect if the user is not logged in or not a manager
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 1) {
@@ -10,29 +12,21 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 1) {
 
 $database = new Database();
 $db = $database->connect();
+$vacationModel = new Vacation($db);
+$notificationModel = new Notification($db);
 
 // Fetch vacation requests
-$query = $db->prepare("
-    SELECT vr.id, vr.created_at, vr.date_from, vr.date_to, vr.days, vr.reason, s.title AS status_name, vr.status_id as status_id
-    FROM vacation_requests vr
-    INNER JOIN statuses s ON vr.status_id = s.id
-");
-$query->execute();
-$vacations = $query->fetchAll(PDO::FETCH_ASSOC);
+$vacations = $vacationModel->fetchVacations();
 
-// Set all notifications with isRead = 1 to isRead = 0
-$update_notifications = $db->prepare("UPDATE notifications SET isRead = 1 WHERE isRead = 0");
-$update_notifications->execute();
+// Mark all unread notifications as read
+$notificationModel->markNotificationsAsRead();
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_status') {
     $vacation_id = $_POST['vacation_id'];
     $new_status = $_POST['status_id'];
 
-    $update_query = $db->prepare("UPDATE vacation_requests SET status_id = :status_id WHERE id = :id");
-    $update_query->bindParam(":status_id", $new_status);
-    $update_query->bindParam(":id", $vacation_id);
-    $update_query->execute();
+    $vacationModel->updateStatus($vacation_id, $new_status);
 
     $_SESSION['success_message'] = "Status updated successfully!";
     header("Location: vacations.php");
@@ -42,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $success_message = isset($_SESSION['success_message']) ? $_SESSION['success_message'] : '';
 unset($_SESSION['success_message']);
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

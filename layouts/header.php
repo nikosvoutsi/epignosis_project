@@ -1,25 +1,19 @@
 <?php
 require_once "Database.php";
+require_once "notification.php";
 
 $database = new Database();
 $db = $database->connect();
 
-// Fetch the number of unread notifications
-$query = $db->prepare("SELECT COUNT(*) AS unread_count FROM notifications WHERE isRead = 0");
-$query->execute();
-$unread_count = $query->fetch(PDO::FETCH_ASSOC)['unread_count'];
+$notificationModel = new Notification($db);
 
-// Fetch the unread notifications
-$notifications_query = $db->prepare("
-    SELECT n.title, u.name AS user_name, n.created_at 
-    FROM notifications n
-    INNER JOIN users u ON n.user_id = u.id
-    WHERE n.isRead = 0
-    ORDER BY n.created_at DESC
-");
-$notifications_query->execute();
-$notifications = $notifications_query->fetchAll(PDO::FETCH_ASSOC);
+// Fetch the number of unread notifications
+$unread_count = $notificationModel->getUnreadCount();
+
+// Fetch unread notifications
+$notifications = $notificationModel->getUnreadNotifications();
 ?>
+
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
@@ -58,7 +52,7 @@ $notifications = $notifications_query->fetchAll(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <h6 class="mb-1"><?= htmlspecialchars($notification['title']) ?></h6>
                                     <small class="text-muted"> <?= htmlspecialchars($notification['user_name']) ?></small><br>
-                                    <small class="text-muted"><?= htmlspecialchars($notification['created_at']) ?></small>
+                                    <small class="text-muted"><?= htmlspecialchars(date('d/m/Y H:i:s', strtotime($notification['created_at']))) ?></small>
                                 </div>
                                 <hr>
                             <?php endforeach; ?>

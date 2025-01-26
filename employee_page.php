@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once "Database.php";
+require_once "vacation.php";
+require_once "notification.php";
 
 // Redirect if the user is not logged in or not an employee
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 2) {
@@ -11,82 +13,36 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 2) {
 $database = new Database();
 $db = $database->connect();
 
-// Handle vacation request creation
+$vacationModel = new Vacation($db);
+$notificationModel = new Notification($db);
+
+// Handle POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action']) && $_POST['action'] === 'create_vacation') {
-        $date_from = trim($_POST['date_from']);
-        $date_to = trim($_POST['date_to']);
-        $reason = trim($_POST['reason']);
+    if (isset($_POST['action'])) {
+        try {
+            if ($_POST['action'] === 'create_vacation') {
+                $date_from = trim($_POST['date_from']);
+                $date_to = trim($_POST['date_to']);
+                $reason = trim($_POST['reason']);
 
-        if (!empty($date_from) && !empty($date_to) && !empty($reason)) {
-            $start_date = new DateTime($date_from);
-            $end_date = new DateTime($date_to);
-            $days = 0;
+                if (!empty($date_from) && !empty($date_to) && !empty($reason)) {
+                    $vacation_request_id = $vacationModel->createVacation($date_from, $date_to, $reason, $_SESSION['user_id']);
+                    $notification_title = "New vacation request from ";
+                    $notificationModel->createNotification($notification_title, $_SESSION['user_id'], $vacation_request_id);
 
-            while ($start_date <= $end_date) {
-                if ($start_date->format('N') < 6) { // Weekday
-                    $days++;
+                    $_SESSION['success_message'] = "Vacation request created successfully!";
+                } else {
+                    $_SESSION['error_message'] = "All fields are required!";
                 }
-                $start_date->modify('+1 day');
+            } elseif ($_POST['action'] === 'delete_vacation') {
+                $vacation_id = $_POST['vacation_id'];
+                $vacationModel->deleteVacation($vacation_id, $_SESSION['user_id']);
+                $_SESSION['success_message'] = "Vacation request deleted successfully!";
             }
-
-            try {
-                // Start a transaction to ensure consistency
-                $db->beginTransaction();
-
-                // Insert into vacation_requests
-                $insert_vacation_query = $db->prepare("
-                    INSERT INTO vacation_requests (date_from, date_to, reason, days, user_id, status_id, created_at)
-                    VALUES (:date_from, :date_to, :reason, :days, :user_id, 1, NOW())
-                ");
-                $insert_vacation_query->bindParam(":date_from", $date_from);
-                $insert_vacation_query->bindParam(":date_to", $date_to);
-                $insert_vacation_query->bindParam(":reason", $reason);
-                $insert_vacation_query->bindParam(":days", $days);
-                $insert_vacation_query->bindParam(":user_id", $_SESSION['user_id']);
-                $insert_vacation_query->execute();
-
-                // Get the ID of the newly created vacation request
-                $vacation_request_id = $db->lastInsertId();
-
-                // Insert into notifications
-                $insert_notification_query = $db->prepare("
-                    INSERT INTO notifications (title, user_id, vacation_request_id, created_at)
-                    VALUES (:title, :user_id, :vacation_request_id, NOW())
-                ");
-                $notification_title = "New vacation request from ";
-                $insert_notification_query->bindParam(":title", $notification_title);
-                $insert_notification_query->bindParam(":user_id", $_SESSION['user_id']);
-                $insert_notification_query->bindParam(":vacation_request_id", $vacation_request_id);
-                $insert_notification_query->execute();
-
-                // Commit the transaction
-                $db->commit();
-
-                $_SESSION['success_message'] = "Vacation request created successfully!";
-            } catch (Exception $e) {
-                // Roll back the transaction on failure
-                $db->rollBack();
-                $_SESSION['error_message'] = "An error occurred while creating the vacation request.";
-            }
-        } else {
-            $_SESSION['error_message'] = "All fields are required!";
+        } catch (Exception $e) {
+            $_SESSION['error_message'] = "An error occurred while processing your request.";
         }
 
-        header("Location: employee_page.php");
-        exit();
-    }
-
-
-    if (isset($_POST['action']) && $_POST['action'] === 'delete_vacation') {
-        $vacation_id = $_POST['vacation_id'];
-
-        $delete_query = $db->prepare("DELETE FROM vacation_requests WHERE id = :id AND user_id = :user_id");
-        $delete_query->bindParam(":id", $vacation_id);
-        $delete_query->bindParam(":user_id", $_SESSION['user_id']);
-        $delete_query->execute();
-
-        $_SESSION['success_message'] = "Vacation request deleted successfully!";
         header("Location: employee_page.php");
         exit();
     }
@@ -94,18 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch user's vacation requests
 $user_id = $_SESSION['user_id'];
-$vacations = $db->query("
-    SELECT v.id, v.user_id, v.date_from, v.date_to, v.days, v.reason, v.created_at, s.title as status_name, v.status_id
-    FROM vacation_requests v
-    INNER JOIN statuses s ON v.status_id = s.id
-    WHERE v.user_id = $user_id
-    ORDER BY created_at DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+$vacations = $vacationModel->fetchVacationsByUser($user_id);
 
 $success_message = isset($_SESSION['success_message']) ? $_SESSION['success_message'] : '';
 $error_message = isset($_SESSION['error_message']) ? $_SESSION['error_message'] : '';
 unset($_SESSION['success_message'], $_SESSION['error_message']);
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -275,7 +226,6 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                 alert("Weekends are not allowed. Please select a weekday.");
             }
 
-            // Set "Date To" minimum based on "Date From"
             if (dateFromInput.value) {
                 dateToInput.removeAttribute('disabled');
                 dateToInput.setAttribute('min', dateFromInput.value);
@@ -285,7 +235,6 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
             }
         });
 
-        // Disable past dates and weekends for "Date To"
         dateToInput.addEventListener('input', function () {
             const selectedDate = new Date(dateToInput.value);
             if (selectedDate.getDay() === 0 || selectedDate.getDay() === 6) { // Sunday or Saturday
@@ -294,7 +243,6 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
             }
         });
 
-        // Initially disable "Date To" until "Date From" is selected
         dateToInput.setAttribute('disabled', 'true');
     });
 </script>

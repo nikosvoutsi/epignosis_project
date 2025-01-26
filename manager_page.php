@@ -5,7 +5,6 @@ require_once "User.php";
 
 $success_message = isset($_SESSION['success_message']) ? $_SESSION['success_message'] : '';
 $error_message = isset($_SESSION['error_message']) ? $_SESSION['error_message'] : '';
-
 unset($_SESSION['success_message'], $_SESSION['error_message']);
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 1) {
@@ -18,7 +17,7 @@ $db = $database->connect();
 $userModel = new User($db);
 
 // Fetch users for the table
-$users = $db->query("SELECT id, name, email, employee_code FROM users WHERE usertype_id = 2" )->fetchAll(PDO::FETCH_ASSOC);
+$users = $userModel->fetchUsers();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
@@ -28,43 +27,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $employee_code = trim($_POST['employee_code']);
             $password = trim($_POST['password']);
             $confirm_password = trim($_POST['confirm_password']);
-        
-            // Validation flags and error messages
+
             if (empty($name) || empty($email) || empty($employee_code) || empty($password) || empty($confirm_password)) {
                 $_SESSION['error_message'] = "All fields are required.";
             } elseif (strlen($employee_code) !== 7) {
                 $_SESSION['error_message'] = "Employee code must be exactly 7 characters.";
-            } elseif (strlen($password) < 6) {
-                $_SESSION['error_message'] = "Password must be at least 6 characters.";
-            } elseif (!preg_match('/[A-Za-z]/', $password) || !preg_match('/[0-9]/', $password) || !preg_match('/[!@#$%^&*(),.?":{}|<>]/', $password)) {
+            } elseif (strlen($password) < 6 || 
+                      !preg_match('/[A-Za-z]/', $password) || 
+                      !preg_match('/[0-9]/', $password) || 
+                      !preg_match('/[!@#$%^&*(),.?":{}|<>]/', $password)) {
                 $_SESSION['error_message'] = "Password must include at least one letter, one number, and one special character.";
             } elseif ($password !== $confirm_password) {
                 $_SESSION['error_message'] = "Passwords do not match.";
+            } elseif ($userModel->checkEmailExists($email)) {
+                $_SESSION['error_message'] = "User with this email already exists!";
+            } elseif ($userModel->checkEmployeeCodeExists($employee_code)) {
+                $_SESSION['error_message'] = "Employee code must be unique!";
             } else {
-                // Check if email already exists
-                $query = $db->prepare("SELECT id FROM users WHERE email = :email");
-                $query->bindParam(":email", $email);
-                $query->execute();
-        
-                // Check if employee_code already exists
-                $code_query = $db->prepare("SELECT id FROM users WHERE employee_code = :employee_code");
-                $code_query->bindParam(":employee_code", $employee_code);
-                $code_query->execute();
-        
-                if ($query->rowCount() > 0) {
-                    $_SESSION['error_message'] = "User with this email already exists!";
-                } elseif ($code_query->rowCount() > 0) {
-                    $_SESSION['error_message'] = "Employee code must be unique!";
-                } else {
-                    $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-                    $insert_query = $db->prepare("INSERT INTO users (name, email, password, usertype_id, employee_code) VALUES (:name, :email, :password, 2, :employee_code)");
-                    $insert_query->bindParam(":name", $name);
-                    $insert_query->bindParam(":email", $email);
-                    $insert_query->bindParam(":password", $hashed_password);
-                    $insert_query->bindParam(":employee_code", $employee_code);
-                    $insert_query->execute();
-                    $_SESSION['success_message'] = "User created successfully!";
-                }
+                $hashed_password = password_hash($password, PASSWORD_BCRYPT);
+                $userModel->createUser($name, $email, $employee_code, $hashed_password);
+                $_SESSION['success_message'] = "User created successfully!";
             }
             header("Location: manager_page.php");
             exit();
@@ -76,79 +58,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $old_password = trim($_POST['old_password']);
             $new_password = trim($_POST['new_password']);
             $confirm_new_password = trim($_POST['confirm_new_password']);
-        
-            // Check if employee_code is unique (excluding current user)
-            $code_query = $db->prepare("SELECT id FROM users WHERE employee_code = :employee_code AND id != :id");
-            $code_query->bindParam(":employee_code", $employee_code);
-            $code_query->bindParam(":id", $id);
-            $code_query->execute();
-        
-            if ($code_query->rowCount() > 0) {
+
+            if ($userModel->checkEmployeeCodeExists($employee_code, $id)) {
                 $_SESSION['error_message'] = "Employee code must be unique!";
-                header("Location: manager_page.php");
-                exit();
-            }
-        
-            // Validate employee code length
-            if (strlen($employee_code) !== 7) {
+            } elseif (strlen($employee_code) !== 7) {
                 $_SESSION['error_message'] = "Employee code must be exactly 7 characters.";
-                header("Location: manager_page.php");
-                exit();
-            }
-        
-            // Update basic user info
-            $update_query = $db->prepare("UPDATE users SET name = :name, email = :email, employee_code = :employee_code WHERE id = :id");
-            $update_query->bindParam(":name", $name);
-            $update_query->bindParam(":email", $email);
-            $update_query->bindParam(":employee_code", $employee_code);
-            $update_query->bindParam(":id", $id);
-            $update_query->execute();
-        
-            // Handle password update
-            if (!empty($old_password) && !empty($new_password) && $new_password === $confirm_new_password) {
-                if (strlen($new_password) < 6) {
-                    $_SESSION['error_message'] = "Password must be at least 6 characters.";
-                } elseif (!preg_match('/[A-Za-z]/', $new_password) || !preg_match('/[0-9]/', $new_password) || !preg_match('/[!@#$%^&*(),.?":{}|<>]/', $new_password)) {
-                    $_SESSION['error_message'] = "Password must include at least one letter, one number, and one special character.";
-                } else {
-                    $query = $db->prepare("SELECT password FROM users WHERE id = :id");
-                    $query->bindParam(":id", $id);
-                    $query->execute();
-                    $user = $query->fetch(PDO::FETCH_ASSOC);
-        
-                    if ($user && password_verify($old_password, $user['password'])) {
+            } else {
+                $userModel->updateUser($id, $name, $email, $employee_code);
+
+                if (!empty($old_password) && !empty($new_password) && $new_password === $confirm_new_password) {
+                    $existing_password = $userModel->fetchPassword($id);
+                    if (password_verify($old_password, $existing_password)) {
                         $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
-                        $password_query = $db->prepare("UPDATE users SET password = :password WHERE id = :id");
-                        $password_query->bindParam(":password", $hashed_password);
-                        $password_query->bindParam(":id", $id);
-                        $password_query->execute();
+                        $userModel->updatePassword($id, $hashed_password);
                         $_SESSION['success_message'] = "User updated successfully!";
                     } else {
                         $_SESSION['error_message'] = "Old password is incorrect!";
                     }
                 }
-            } elseif (!empty($new_password) || !empty($confirm_new_password)) {
-                $_SESSION['error_message'] = "Passwords must match and follow the password rules.";
-            } else {
-                $_SESSION['success_message'] = "User updated successfully!";
             }
             header("Location: manager_page.php");
             exit();
-        }
-        elseif ($_POST['action'] === 'delete_user') {
-            // Handle user deletion
+        } elseif ($_POST['action'] === 'delete_user') {
             $id = $_POST['id'];
-            $delete_query = $db->prepare("DELETE FROM users WHERE id = :id");
-            $delete_query->bindParam(":id", $id);
-            $delete_query->execute();
+            $userModel->deleteUser($id);
             $_SESSION['success_message'] = "User deleted successfully!";
             header("Location: manager_page.php");
             exit();
         }
     }
 }
-
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
