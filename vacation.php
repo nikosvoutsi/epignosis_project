@@ -6,7 +6,6 @@ class Vacation {
         $this->conn = $db;
     }
 
-    // Fetch all vacation requests
     public function fetchVacations() {
         $query = $this->conn->prepare("
             SELECT vr.id, vr.created_at, vr.date_from, vr.date_to, vr.days, vr.reason, s.title AS status_name, vr.status_id as status_id
@@ -19,7 +18,6 @@ class Vacation {
 
     
 
-    // Update the status of a vacation request
     public function updateStatus($vacation_id, $new_status) {
         $query = $this->conn->prepare("UPDATE vacation_requests SET status_id = :status_id WHERE id = :id");
         $query->bindParam(":status_id", $new_status);
@@ -42,7 +40,6 @@ class Vacation {
         try {
             $this->conn->beginTransaction();
 
-            // Insert vacation request
             $query = $this->conn->prepare("
                 INSERT INTO vacation_requests (date_from, date_to, reason, days, user_id, status_id, created_at)
                 VALUES (:date_from, :date_to, :reason, :days, :user_id, 1, NOW())
@@ -66,7 +63,6 @@ class Vacation {
         }
     }
 
-    // Delete a vacation request
     public function deleteVacation($vacation_id, $user_id) {
         $query = $this->conn->prepare("
             DELETE FROM vacation_requests 
@@ -77,7 +73,6 @@ class Vacation {
         $query->execute();
     }
 
-    // Fetch all vacations for a user
     public function fetchVacationsByUser($user_id) {
         $query = $this->conn->prepare("
             SELECT v.id, v.user_id, v.date_from, v.date_to, v.days, v.reason, v.created_at, s.title as status_name, v.status_id

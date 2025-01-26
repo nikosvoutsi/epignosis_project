@@ -15,7 +15,6 @@ $db = $database->connect();
 $vacationModel = new Vacation($db);
 $notificationModel = new Notification($db);
 
-// Fetch vacation requests
 $vacations = $vacationModel->fetchVacations();
 
 // Mark all unread notifications as read
