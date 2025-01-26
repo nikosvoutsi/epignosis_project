@@ -50,11 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .container {
-            max-width: 400px;
+            max-width: 500px;
             padding: 30px;
             background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-top:30vh;
         }
 
         .form-label {
@@ -98,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </style>
 </head>
 <body>
-    <div class="container mt-5">
+    <div class="container">
         <h3 class="text-center">Login</h3>
         
         <?php if (!empty($error_message)) : ?>
